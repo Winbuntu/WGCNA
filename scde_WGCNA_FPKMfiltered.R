@@ -2,6 +2,14 @@ library(scde)
 
 RC.df.clean = read.csv("RC.df.clean.csv",row.names = 1)
 
+# this is defined in compute_FPKM.R
+# RC.clean.2.fpkm
+good.genes = rownames(RC.clean.2.fpkm)
+
+
+RC.df.clean.fi = RC.df.clean[match(good.genes,rownames(RC.df.clean)),]
+
+
 #RC.df.clean = RC.df.clean[,-c(11,13,14)]
 
 coldata # generated in DEseq.R 
@@ -14,7 +22,7 @@ names(sg) = rownames(coldata)
 
 table(sg)
 
-cd <- clean.counts(RC.df.clean, min.lib.size=1000,
+cd <- clean.counts(RC.df.clean.fi, min.lib.size=1000,
                    min.reads = 1, min.detected = 5) ## changed here
 
 o.ifm <- scde.error.models(counts = cd, 
@@ -64,7 +72,7 @@ scde.test.gene.expression.difference("Slc15a2",
 ###################################
 
 
-cd = RC.df.clean
+cd = RC.df.clean.fi
 cd <- cd[rowSums(cd>2)>3, ]
 
 knn <- knn.error.models(as.matrix(cd), k = ncol(cd)/2, n.cores = 1, 
@@ -106,9 +114,7 @@ P +geom_point(shape = factor(coldata$condition)   ,size = 3) +
   theme_classic(base_size = 10) + ylim(c(-90,60)) + xlim(c(-140,90))
 
 #############################################
-# this is defined in compute_FPKM.R
-# RC.clean.2.fpkm
-good.genes = rownames(RC.clean.2.fpkm)
+
 
 
 
@@ -125,18 +131,18 @@ disableWGCNAThreads()
 mydata=varinfo$mat;
 dim(mydata)
 
-mydata = mydata[match(good.genes,rownames(mydata)),]
+#mydata = mydata[match(good.genes,rownames(mydata)),]
 
 #gene.names=names(sort(varinfo$arv,decreasing=T));
 
 mydata.trans=t(mydata);
 
 #######################################
-library(WGCNA)
-library("flashClust")
-options(stringsAsFactors = FALSE);
+#library(WGCNA)
+#library("flashClust")
+#options(stringsAsFactors = FALSE);
 #enableWGCNAThreads()
-disableWGCNAThreads()
+#disableWGCNAThreads()
 
 ############
 
@@ -149,7 +155,7 @@ dim(mydata)
 
 #n=5000;
 datExpr=mydata.trans#[,gene.names[1:n]];
-SubGeneNames=good.genes#gene.names[1:n];
+SubGeneNames=colnames(datExpr)
 
 
 powers = c(c(1:30));
@@ -182,6 +188,7 @@ dissTOM=1-TOM
 
 geneTree = flashClust(as.dist(dissTOM),method="average");
 
+par(mfrow = c(1,1));
 plot(geneTree, xlab="", sub="",cex=0.3);
 
 
@@ -193,6 +200,45 @@ dynamicColors = labels2colors(dynamicMods)
 
 plotDendroAndColors(geneTree, dynamicColors, "Dynamic Tree Cut", dendroLabels = FALSE, hang = 0.03, 
                     addGuide = TRUE, guideHang = 0.05, main = "Gene dendrogram and module colors")
+
+
+
+###################################################
+
+# Calculate eigengenes
+MEList = moduleEigengenes(datExpr, colors = dynamicColors)
+MEs = MEList$eigengenes
+# Calculate dissimilarity of module eigengenes
+MEDiss = 1-cor(MEs);
+# Cluster module eigengenes
+METree = hclust(as.dist(MEDiss), method = "average");
+# Plot the result
+sizeGrWindow(7, 6)
+plot(METree, main = "Clustering of module eigengenes",
+     xlab = "", sub = "")
+
+MEDissThres = 0.25
+# Plot the cut line into the dendrogram
+abline(h=MEDissThres, col = "red")
+
+
+merge = mergeCloseModules(datExpr, dynamicColors, cutHeight = MEDissThres, verbose = 3)
+# The merged module colors
+mergedColors = merge$colors;
+# Eigengenes of the new merged modules:
+mergedMEs = merge$newMEs;
+
+sizeGrWindow(12, 9)
+#pdf(file = "Plots/geneDendro-3.pdf", wi = 9, he = 6)
+plotDendroAndColors(geneTree, cbind(dynamicColors, mergedColors),
+                    c("Dynamic Tree Cut", "Merged dynamic"),
+                    dendroLabels = FALSE, hang = 0.03,
+                    addGuide = TRUE, guideHang = 0.05)
+
+
+#####################################################
+
+
 
 ###########################################
 
